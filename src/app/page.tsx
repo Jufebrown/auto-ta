@@ -1,45 +1,69 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { fetchStockQuote, GlobalQuote } from '@/lib/fetchStockQuote';
+import { useEffect, useState } from 'react';
+import CandlestickChart, { Candle } from '@/components/CandlestickChart';
+
+interface AlphaVantageDailyResponse {
+  [date: string]: {
+    '1. open': string;
+    '2. high': string;
+    '3. low': string;
+    '4. close': string;
+    '5. volume': string;
+  };
+}
 
 const SYMBOL = 'GME';
 
-export default function Home() {
-  const [quote, setQuote] = useState<GlobalQuote | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function HomePage() {
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const getQuote = async () => {
+    const fetchData = async () => {
       try {
-        const data = await fetchStockQuote(SYMBOL);
-        setQuote(data);
+        const apiKey = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY;
+        const res = await fetch(
+          `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${SYMBOL}&apikey=${apiKey}`
+        );
+        const json = await res.json();
+
+        const raw: AlphaVantageDailyResponse = json['Time Series (Daily)'];
+        if (!raw) {
+          throw new Error(json['Note'] || json['Error Message'] || 'Invalid data from Alpha Vantage');
+        }
+
+        const parsed: Candle[] = Object.entries(raw)
+          .map(([date, values]) => ({
+            time: date as const, // lightweight-charts accepts 'YYYY-MM-DD' string
+            open: parseFloat(values['1. open']),
+            high: parseFloat(values['2. high']),
+            low: parseFloat(values['3. low']),
+            close: parseFloat(values['4. close']),
+          }))
+          .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+        setCandles(parsed);
       } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        console.error(err);
+        setError(err.message || 'Failed to fetch stock data');
       }
     };
 
-    getQuote();
+    fetchData();
   }, []);
 
-  if (loading) return <p className="p-4">Loading stock data...</p>;
-  if (error) return <p className="p-4 text-red-500">Error: {error}</p>;
-
   return (
-    <div className="p-6 font-sans">
-      <h1 className="text-2xl font-bold mb-4">Stock Quote: {quote?.['01. symbol']}</h1>
-      <ul className="space-y-2">
-        <li><strong>Price:</strong> ${quote?.['05. price']}</li>
-        <li><strong>Open:</strong> ${quote?.['02. open']}</li>
-        <li><strong>High:</strong> ${quote?.['03. high']}</li>
-        <li><strong>Low:</strong> ${quote?.['04. low']}</li>
-        <li><strong>Previous Close:</strong> ${quote?.['08. previous close']}</li>
-        <li><strong>Change:</strong> {quote?.['09. change']} ({quote?.['10. change percent']})</li>
-        <li><strong>Volume:</strong> {quote?.['06. volume']}</li>
-      </ul>
-    </div>
+    <main className="p-6 max-w-5xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Stock Candlestick Chart ({SYMBOL})</h1>
+
+      {error && <p className="text-red-600">{error}</p>}
+
+      {!error && candles.length === 0 && <p>Loading chart data...</p>}
+
+      {!error && candles.length > 0 && (
+        <CandlestickChart data={candles} height={500} />
+      )}
+    </main>
   );
 }
