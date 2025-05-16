@@ -13,7 +13,6 @@ export interface GlobalQuote {
 
 export const fetchStockQuote = async (symbol: string): Promise<GlobalQuote> => {
   const API_KEY = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY;
-
   const res = await fetch(
     `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`
   );
